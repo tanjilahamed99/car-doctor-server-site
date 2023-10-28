@@ -1,19 +1,41 @@
 const express = require('express')
 const app = express()
 const cors = require('cors')
+const jwt = require('jsonwebtoken')
+const cookieParser = require('cookie-parser')
 const port = process.env.PORT || 5000
 require('dotenv').config()
-// carDoctor
-// WDu06rcxrLnn75Uo
 
 
-app.use(cors())
+app.use(cookieParser())
+app.use(cors({
+    origin: ['http://localhost:5173'],
+    credentials: true
+}))
 app.use(express.json())
+
+
+
 
 app.get('/', (req, res) => {
     res.send('hello everyone')
 })
 
+
+const verifyToken = async (req, res, next) => {
+
+    const token = req.cookies.token;
+    if (!token) {
+        return req.status(401).send('forbidden')
+    }
+    jwt.verify(token, process.env.TOKEN_SECRET, (err, decode) => {
+        if (err) {
+            return req.status(401).send('unauthorized')
+        }
+        req.user = decode
+        next()
+    })
+}
 
 
 
@@ -39,6 +61,19 @@ async function run() {
         const bookingCollection = carDoctor.collection("booking");
 
 
+        // token
+        app.post('/jwt', async (req, res) => {
+            const user = req.body
+            const token = jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h' })
+            res
+                .cookie('token', token, {
+                    httpOnly: true,
+                    secure: false
+                })
+                .send({ success: true })
+        })
+
+
         app.get('/services', async (req, res) => {
             const query = servicesCollection.find()
             const result = await query.toArray()
@@ -54,11 +89,28 @@ async function run() {
 
         app.post('/booking', async (req, res) => {
             const newBooking = req.body
-            console.log(newBooking)
             const result = await bookingCollection.insertOne(newBooking)
             res.send(result)
         })
 
+
+        app.get('/booking', verifyToken, async (req, res) => {
+            const query = req.query
+            console.log(req.user)
+            let option = {}
+            if (query.email) {
+                option = { email: query.email }
+            }
+            const result = await bookingCollection.find(option).toArray()
+            res.send(result)
+        })
+
+        app.delete('/booking/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const result = await bookingCollection.deleteOne(query)
+            res.send(result)
+        })
 
 
         // Send a ping to confirm a successful connection
