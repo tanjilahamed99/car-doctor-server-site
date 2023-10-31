@@ -22,19 +22,34 @@ app.get('/', (req, res) => {
 })
 
 
-const verifyToken = async (req, res, next) => {
 
-    const token = req.cookies.token;
+// const verify = (req, res, next) => {
+//     const token = req.cookies.token;
+//     if (!token) {
+//         return res.status(401).send({ message: 'unauthorized user' })
+//     }
+//     jwt.verify(token, process.env.TOKEN_SECRET, (err, decoded) => {
+//         if (err) {
+//             // return res.status(401).send({ message: 'forbidden' })
+//             next()
+//             req.user = decoded
+//         }
+//     })
+// }
+
+
+const verifyToken = (req, res, next) => {
+    const token = req.cookies?.token;
     if (!token) {
-        return req.status(401).send('forbidden')
+        return res.send('forbidden')
     }
-    jwt.verify(token, process.env.TOKEN_SECRET, (err, decode) => {
+    jwt.verify(token, process.env.TOKEN_SECRET, (err, decoded) => {
         if (err) {
-            return req.status(401).send('unauthorized')
+            return res.status(401).json({ message: 'Unauthorized' });
         }
-        req.user = decode
-        next()
-    })
+        req.user = decoded;
+        next();
+    });
 }
 
 
@@ -61,16 +76,22 @@ async function run() {
         const bookingCollection = carDoctor.collection("booking");
 
 
-        // token
-        app.post('/jwt', async (req, res) => {
+        // auth methods
+        app.post('/jwt', (req, res) => {
             const user = req.body
-            const token = jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h' })
+            const token = jwt.sign(user, process.env.TOKEN_SECRET, { expiresIn: '1h' });
             res
                 .cookie('token', token, {
                     httpOnly: true,
                     secure: false
                 })
                 .send({ success: true })
+        })
+
+
+        app.post('/logout', async (req, res) => {
+            const user = req.body
+            res.clearCookie('token', { maxAge: 0 }).send({ logout: true })
         })
 
 
@@ -97,6 +118,9 @@ async function run() {
         app.get('/booking', verifyToken, async (req, res) => {
             const query = req.query
             console.log(req.user)
+            if (req.user.email !== req.query.email) {
+                return res.send({ message: 'forbidden' })
+            }
             let option = {}
             if (query.email) {
                 option = { email: query.email }
@@ -104,6 +128,7 @@ async function run() {
             const result = await bookingCollection.find(option).toArray()
             res.send(result)
         })
+
 
         app.delete('/booking/:id', async (req, res) => {
             const id = req.params.id
